@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stopky s Wake Lock</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-color: #f8fafc;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --success: #10b981;
+            --disabled: #64748b;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            padding: 30px;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            text-align: center;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .time-display {
+            font-size: 3.5rem;
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 30px;
+            letter-spacing: -1px;
+        }
+
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        button {
+            font-size: 1rem;
+            font-weight: 600;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        #startStopBtn {
+            background-color: var(--primary);
+            color: white;
+        }
+        #startStopBtn:hover { background-color: var(--primary-hover); }
+        #startStopBtn.running { background-color: var(--danger); }
+        #startStopBtn.running:hover { background-color: var(--danger-hover); }
+
+        #resetBtn {
+            background-color: #475569;
+            color: white;
+        }
+        #resetBtn:hover { background-color: #334155; }
+
+        .wakelock-section {
+            border-top: 1px solid #334155;
+            padding-top: 20px;
+            margin-top: 10px;
+        }
+
+        #wakeLockBtn {
+            width: 100%;
+            background-color: #475569;
+            color: white;
+            margin-bottom: 12px;
+        }
+        #wakeLockBtn.active {
+            background-color: var(--success);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #94a3b8;
+        }
+
+        .indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--danger);
+            display: inline-block;
+            transition: background-color 0.3s ease;
+        }
+
+        .indicator.active {
+            background-color: var(--success);
+            box-shadow: 0 0 8px var(--success);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Displej stopek -->
+        <div class="time-display" id="display">00:00:00.00</div>
+
+        <!-- Ovládání stopek -->
+        <div class="button-group">
+            <button id="startStopBtn" onclick="toggleTimer()">Start</button>
+            <button id="resetBtn" onclick="resetTimer()">Reset</button>
+        </div>
+
+        <!-- Ovládání Wake Locku -->
+        <div class="wakelock-section">
+            <button id="wakeLockBtn" onclick="toggleWakeLock()">Zabránit uspání obrazovky</button>
+            <div class="status-badge">
+                <span id="indicator" class="indicator"></span>
+                Status: <span id="statusText">Vypnuto (Displej se může uspat)</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- LOGIKA STOPEK ---
+        let startTime = 0;
+        let elapsedTime = 0;
+        let timerInterval = null;
+
+        const display = document.getElementById('display');
+        const startStopBtn = document.getElementById('startStopBtn');
+
+        function toggleTimer() {
+            if (timerInterval) {
+                // STOP
+                clearInterval(timerInterval);
+                timerInterval = null;
+                startStopBtn.textContent = 'Start';
+                startStopBtn.classList.remove('running');
+            } else {
+                // START
+                startTime = Date.now() - elapsedTime;
+                timerInterval = setInterval(updateTime, 10);
+                startStopBtn.textContent = 'Stop';
+                startStopBtn.classList.add('running');
+            }
+        }
+
+        function resetTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            elapsedTime = 0;
+            display.textContent = '00:00:00.00';
+            startStopBtn.textContent = 'Start';
+            startStopBtn.classList.remove('running');
+        }
+
+        function updateTime() {
+            elapsedTime = Date.now() - startTime;
+
+            let hours = Math.floor(elapsedTime / 3600000);
+            let minutes = Math.floor((elapsedTime % 3600000) / 60000);
+            let seconds = Math.floor((elapsedTime % 60000) / 1000);
+            let centiseconds = Math.floor((elapsedTime % 1000) / 10);
+
+            // Formátování na dvě cifry
+            let hStr = String(hours).padStart(2, '0');
+            let mStr = String(minutes).padStart(2, '0');
+            let sStr = String(seconds).padStart(2, '0');
+            let cStr = String(centiseconds).padStart(2, '0');
+
+            display.textContent = `${hStr}:${mStr}:${sStr}.${cStr}`;
+        }
+
+        // --- LOGIKA SCREEN WAKE LOCK API ---
+        let wakeLock = null;
+        const wakeLockBtn = document.getElementById('wakeLockBtn');
+        const indicator = document.getElementById('indicator');
+        const statusText = document.getElementById('statusText');
+
+        // Funkce pro aktualizaci UI podle stavu Wake Locku
+        function updateWakeLockUI(isActive) {
+            if (isActive) {
+                wakeLockBtn.textContent = 'Uvolnit zámek obrazovky';
+                wakeLockBtn.classList.add('active');
+                indicator.classList.add('active');
+                statusText.textContent = 'Aktivní (Displej zůstane zapnutý)';
+                statusText.style.color = 'var(--success)';
+            } else {
+                wakeLockBtn.textContent = 'Zabránit uspání obrazovky';
+                wakeLockBtn.classList.remove('active');
+                indicator.classList.remove('active');
+                statusText.textContent = 'Vypnuto (Displej se může uspat)';
+                statusText.style.color = '#94a3b8';
+            }
+        }
+
+        async function toggleWakeLock() {
+            // Kontrola podpory v prohlížeči
+            if (!('wakeLock' in navigator)) {
+                alert('Wake Lock API není v tomto prohlížeči podporováno. Na iOS je vyžadován iOS 16.4+ a Safari (případně Chrome na iOS 16.4+).');
+                return;
+            }
+
+            if (wakeLock) {
+                // Pokud je aktivní, ručně ho uvolníme
+                await wakeLock.release();
+                wakeLock = null;
+                updateWakeLockUI(false);
+            } else {
+                // Pokud je vypnutý, zažádáme o něj
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    updateWakeLockUI(true);
+
+                    // Wake Lock se automaticky uvolní, pokud uživatel minimalizuje kartu/přepne aplikaci
+                    wakeLock.addEventListener('release', () => {
+                        wakeLock = null;
+                        updateWakeLockUI(false);
+                    });
+                } catch (err) {
+                    console.error(`${err.name}, ${err.message}`);
+                    alert('Nepodařilo se aktivovat Wake Lock. Ujistěte se, že stránku nespouštíte v anonymním režimu (některé prohlížeče ho tam blokují) nebo že nemáte kriticky vybitou baterii.');
+                }
+            }
+        }
+
+        // DŮLEŽITÉ PRO IOS / SAFARI:
+        // Když se uživatel vrátí zpět na kartu (např. po zamknutí a odemknutí telefonu), 
+        // původní Wake Lock je systémem uvolněn. Musíme ho automaticky obnovit, pokud byl aktivní.
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    updateWakeLockUI(true);
+                } catch (err) {
+                    console.error('Nepodařilo se automaticky obnovit Wake Lock:', err);
+                }
+            }
+        });
+    </script>
+</body>
+</html>
