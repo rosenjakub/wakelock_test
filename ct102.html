@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CusTimer 2.0</title>
+    <style>
+        :root {
+            --bg-color: #000000;
+            --text-color: #ffffff;
+            --accent-red: #ff0000;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #000000;
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Hlavní kontejner aplikace */
+        .app-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 4vh 4vw;
+            background-color: var(--bg-color);
+            transition: background-color 0.3s ease;
+            position: relative;
+        }
+
+        /* REŽIM OTOČENÍ O 90 STUPŇŮ PRO POUŽITÍ NA VÝŠKU */
+        .app-container.rotated-mode {
+            width: 100vh;
+            height: 100vw;
+            position: fixed;
+            top: 0;
+            left: 100%;
+            transform: rotate(90deg);
+            transform-origin: top left;
+        }
+
+        /* Horní panel s informacemi */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            height: 15vh;
+        }
+
+        .current-time {
+            font-size: 8vh;
+            font-weight: bold;
+            width: 30%;
+            text-align: left;
+        }
+
+        .rounds-left {
+            font-size: 10vh;
+            font-weight: bold;
+            width: 30%;
+            text-align: center;
+        }
+
+        .controls-group {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 3vw;
+            width: 40%;
+        }
+
+        /* Ikony režimů */
+        .mode-icon {
+            width: 12vh;
+            height: 12vh;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            fill: currentColor;
+        }
+
+        .mode-icon svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Hlavní čtvercové akční tlačítko */
+        .action-button {
+            width: 12vh;
+            height: 12vh;
+            background-color: #ffffff;
+            color: #000000;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            border-radius: 4px;
+        }
+
+        /* Indikátor WakeLock uvnitř čtverce */
+        .wakelock-status {
+            position: absolute;
+            bottom: 5px;
+            font-size: 1.5vh;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .wakelock-status.active {
+            color: #00cc44;
+        }
+        .wakelock-status.inactive {
+            color: #888888;
+        }
+
+        .action-button svg {
+            width: 50%;
+            height: 50%;
+            fill: #000000;
+        }
+
+        /* Hlavní obří časovač */
+        .timer-display {
+            font-size: 32vh;
+            font-weight: 800;
+            text-align: center;
+            width: 100%;
+            line-height: 1;
+            flex-grow: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Nastavení pro Custom režim */
+        .custom-settings-panel {
+            display: none;
+            position: absolute;
+            bottom: 12vh;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(30, 30, 30, 0.95);
+            border: 2px solid #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            z-index: 10;
+            width: 80%;
+            max-width: 500px;
+        }
+
+        .custom-settings-panel.visible {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .setting-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: white;
+        }
+
+        .setting-box label {
+            font-size: 14px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+
+        .setting-box input {
+            width: 100%;
+            background: #000;
+            border: 1px solid #fff;
+            color: #fff;
+            padding: 8px;
+            font-size: 18px;
+            text-align: center;
+            border-radius: 5px;
+        }
+
+        /* Spodní pomocná lišta s rotací */
+        .footer-utility {
+            height: 4vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+        }
+
+        .rotate-toggle-btn {
+            background: rgba(255, 255, 255, 0.15);
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            padding: 4px 12px;
+            font-size: 2vh;
+            border-radius: 20px;
+            cursor: pointer;
+        }
+
+        /* Stavy pozadí pro pauzu */
+        .app-container.rest-phase {
+            background-color: var(--accent-red);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container" id="appContainer">
+        <!-- Horní lišta -->
+        <div class="header">
+            <div class="current-time" id="currentTime">00:00</div>
+            <div class="rounds-left" id="roundsLeft">-</div>
+            
+            <div class="controls-group">
+                <!-- Tlačítko Režimu / Reset -->
+                <div class="mode-icon" id="modeIcon" title="Změna režimu / Reset"></div>
+                
+                <!-- Hlavní akční čtverec -->
+                <div class="action-button" id="actionBtn">
+                    <div id="actionIcon">
+                        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                    </div>
+                    <div class="wakelock-status inactive" id="wlStatus">WL</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Obří stopky -->
+        <div class="timer-display" id="timerDisplay">00:00</div>
+
+        <!-- Panel nastavení vlastního zápasu (Custom) -->
+        <div class="custom-settings-panel" id="customSettings">
+            <div class="setting-box">
+                <label>Kola</label>
+                <input type="number" id="cRounds" value="5" min="1" max="99">
+            </div>
+            <div class="setting-box">
+                <label>Zápas (s)</label>
+                <input type="number" id="cWork" value="180" min="5" step="5">
+            </div>
+            <div class="setting-box">
+                <label>Pauza (s)</label>
+                <input type="number" id="cRest" value="30" min="0" step="5">
+            </div>
+        </div>
+
+        <!-- Spodní lišta pro vynucené otočení rozhraní -->
+        <div class="footer-utility">
+            <button class="rotate-toggle-btn" id="rotateToggle">Otočit UI o 90°</button>
+        </div>
+    </div>
+
+    <script>
+        const MODES = {
+            POSTOJ: { name: 'postoj', rounds: 5, work: 120, rest: 10 },
+            ZEM: { name: 'zem', rounds: 8, work: 300, rest: 60 },
+            CUSTOM: { name: 'custom', rounds: 5, work: 180, rest: 30 }
+        };
+
+        const ICONS = {
+            postoj: `<svg viewBox="0 0 100 100"><circle cx="35" cy="25" r="6"/><path d="M35 33c-4 0-8 3-8 7v15h5v20h6V55h4V39c0-3-3-6-7-6z"/><path d="M32 55l-7 12h5l4-12z"/><circle cx="65" cy="25" r="6"/><path d="M65 33c-4 0-7 3-7 6v16h4v20h6V55h5V40c0-4-4-7-8-7z"/><path d="M68 55l7 12h-5l-4-12z"/><path d="M38 42h24" stroke="#fff" stroke-width="4"/></svg>`,
+            zem: `<svg viewBox="0 0 100 100"><path d="M20 75h60v6H20z"/><circle cx="40" cy="50" r="6"/><path d="M30 56c-3 0-5 2-5 5v8h30v-8c0-3-2-5-5-5H30z"/><circle cx="65" cy="62" r="6"/><path d="M55 68c0-4 3-7 7-7h10c4 0 7 3 7 7v3H55v-3z"/></svg>`,
+            custom: `<svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>`,
+            play: `<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>`,
+            pause: `<svg viewBox="0 0 24 24"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>`
+        };
+
+        let state = {
+            currentMode: 'POSTOJ',
+            status: 'INIT', 
+            phase: 'WORK',  
+            roundsLeft: 0,
+            timeLeft: 0,
+            intervalId: null,
+            wakeLock: null
+        };
+
+        // --- NOVÝ AUDIO ENGINE BEZ SETTIMEOUT (iOS kompatibilní) ---
+        let audioCtx = null;
+
+        function initAndUnlockAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            // Okamžité přehrání absolutního ticha vytvoří na iOS regulérní schválenou audio session
+            let buffer = audioCtx.createBuffer(1, 1, 22050);
+            let source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+            source.start(0);
+        }
+
+        function playBeep(durationMs, frequency, count = 1) {
+            if (!audioCtx) return;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+
+            const durationSec = durationMs / 1000;
+            const gapSec = 0.12; // Mezera mezi pípnutími
+            let startTime = audioCtx.currentTime;
+
+            // Všechna pípnutí naplánujeme dopředu přímo do hardwaru (iOS to takto nezablokuje)
+            for (let i = 0; i < count; i++) {
+                let osc = audioCtx.createOscillator();
+                let gain = audioCtx.createGain();
+                
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(frequency, startTime);
+                
+                // Jemné vyhlazení náběhu a doběhu tónu (zabrání lupání v reproduktoru)
+                gain.gain.setValueAtTime(0, startTime);
+                gain.gain.linearRampToValueAtTime(0.6, startTime + 0.01);
+                gain.gain.setValueAtTime(0.6, startTime + durationSec - 0.01);
+                gain.gain.linearRampToValueAtTime(0, startTime + durationSec);
+                
+                osc.start(startTime);
+                osc.stop(startTime + durationSec);
+                
+                startTime += durationSec + gapSec;
+            }
+        }
+
+        // --- WAKE LOCK ---
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    state.wakeLock = await navigator.wakeLock.request('screen');
+                    document.getElementById('wlStatus').textContent = "WL ON";
+                    document.getElementById('wlStatus').className = "wakelock-status active";
+                } catch (err) {
+                    document.getElementById('wlStatus').textContent = "WL ERR";
+                    document.getElementById('wlStatus').className = "wakelock-status inactive";
+                }
+            } else {
+                document.getElementById('wlStatus').textContent = "NO WL";
+            }
+        }
+
+        function releaseWakeLock() {
+            if (state.wakeLock) {
+                state.wakeLock.release();
+                state.wakeLock = null;
+                document.getElementById('wlStatus').textContent = "WL OFF";
+                document.getElementById('wlStatus').className = "wakelock-status inactive";
+            }
+        }
+
+        document.addEventListener('visibilitychange', async () => {
+            if (state.wakeLock !== null && document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
+
+        // --- HODINY A UI ---
+        function updateClockDisplay() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = 
+                String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+        }
+        setInterval(updateClockDisplay, 1000);
+        updateClockDisplay();
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+        }
+
+        function updateUI() {
+            const container = document.getElementById('appContainer');
+            const timerText = document.getElementById('timerDisplay');
+            const roundsText = document.getElementById('roundsLeft');
+            const modeIconBox = document.getElementById('modeIcon');
+            const actionIconBox = document.getElementById('actionIcon');
+
+            timerText.textContent = formatTime(state.timeLeft);
+            roundsText.textContent = state.status === 'INIT' ? '-' : state.roundsLeft;
+            modeIconBox.innerHTML = ICONS[MODES[state.currentMode].name];
+
+            if (state.status === 'RUNNING' || state.status === 'PAUSED') {
+                if (state.phase === 'REST') {
+                    container.classList.add('rest-phase');
+                } else {
+                    container.classList.remove('rest-phase');
+                }
+            } else {
+                container.classList.remove('rest-phase');
+            }
+
+            if (state.status === 'INIT') {
+                actionIconBox.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>`;
+            } else if (state.status === 'READY' || state.status === 'PAUSED') {
+                actionIconBox.innerHTML = ICONS.play;
+            } else if (state.status === 'RUNNING') {
+                actionIconBox.innerHTML = ICONS.pause;
+            } else if (state.status === 'FINISHED') {
+                actionIconBox.innerHTML = `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 14h-2v-2h2v2zm0-4h-2V7h2v5z"/></svg>`;
+            }
+
+            const settingsPanel = document.getElementById('customSettings');
+            if (state.currentMode === 'CUSTOM' && (state.status === 'INIT' || state.status === 'READY')) {
+                settingsPanel.classList.add('visible');
+            } else {
+                settingsPanel.classList.remove('visible');
+            }
+        }
+
+        function loadModeSettings() {
+            let config = MODES[state.currentMode];
+            if (state.currentMode === 'CUSTOM') {
+                config.rounds = parseInt(document.getElementById('cRounds').value) || 5;
+                config.work = parseInt(document.getElementById('cWork').value) || 180;
+                config.rest = parseInt(document.getElementById('cRest').value) || 30;
+            }
+            state.roundsLeft = config.rounds;
+            state.timeLeft = config.work;
+            state.phase = 'WORK';
+        }
+
+        function tick() {
+            if (state.status !== 'RUNNING') return;
+
+            state.timeLeft--;
+
+            if (state.timeLeft <= 0) {
+                if (state.phase === 'WORK') {
+                    if (state.roundsLeft > 1) {
+                        state.phase = 'REST';
+                        state.timeLeft = MODES[state.currentMode].rest;
+                        playBeep(200, 950, 2); // 2x krátké vysoké pípnutí
+                    } else {
+                        state.status = 'FINISHED';
+                        clearInterval(state.intervalId);
+                        playBeep(200, 950, 3); // 3x krátké vysoké pípnutí
+                        releaseWakeLock();
+                        setTimeout(() => {
+                            state.status = 'READY';
+                            loadModeSettings();
+                            updateUI();
+                        }, 2000);
+                    }
+                } else {
+                    state.roundsLeft--;
+                    state.phase = 'WORK';
+                    state.timeLeft = MODES[state.currentMode].work;
+                    playBeep(700, 950, 1); // 1x dlouhé vysoké pípnutí
+                }
+            }
+            updateUI();
+        }
+
+        // --- KLIKNUTÍ ---
+
+        // Bílý čtverec
+        document.getElementById('actionBtn').addEventListener('click', async () => {
+            // SYNCHRONNÍ OBLONG PRO AUDIO NA iOS
+            initAndUnlockAudio();
+
+            if (state.status === 'INIT') {
+                await requestWakeLock();
+                loadModeSettings();
+                state.status = 'READY';
+            } else if (state.status === 'READY' || state.status === 'PAUSED') {
+                await requestWakeLock();
+                if (state.status === 'READY' && state.phase === 'WORK' && state.roundsLeft === MODES[state.currentMode].rounds && state.timeLeft === MODES[state.currentMode].work) {
+                    playBeep(700, 950, 1); // Spuštění prvního kola
+                }
+                state.status = 'RUNNING';
+                state.intervalId = setInterval(tick, 1000);
+            } else if (state.status === 'RUNNING') {
+                state.status = 'PAUSED';
+                clearInterval(state.intervalId);
+            }
+            updateUI();
+        });
+
+        // Režimy / Reset
+        document.getElementById('modeIcon').addEventListener('click', () => {
+            initAndUnlockAudio(); // Odemkneme i při interakci s ikonou
+
+            if (state.status === 'RUNNING' || state.status === 'PAUSED') {
+                clearInterval(state.intervalId);
+                loadModeSettings();
+                state.status = 'READY';
+                releaseWakeLock();
+            } else {
+                const modeKeys = Object.keys(MODES);
+                let nextIndex = (modeKeys.indexOf(state.currentMode) + 1) % modeKeys.length;
+                state.currentMode = modeKeys[nextIndex];
+                loadModeSettings();
+            }
+            updateUI();
+        });
+
+        ['cRounds', 'cWork', 'cRest'].forEach(id => {
+            document.getElementById(id).addEventListener('input', () => {
+                if (state.currentMode === 'CUSTOM' && (state.status === 'READY' || state.status === 'INIT')) {
+                    loadModeSettings();
+                    updateUI();
+                }
+            });
+        });
+
+        document.getElementById('rotateToggle').addEventListener('click', () => {
+            const container = document.getElementById('appContainer');
+            container.classList.toggle('rotated-mode');
+            document.getElementById('rotateToggle').textContent = 
+                container.classList.contains('rotated-mode') ? "Zpět na výšku" : "Otočit UI o 90°";
+        });
+
+        updateUI();
+    </script>
+</body>
+</html>
